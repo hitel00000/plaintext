@@ -1,6 +1,7 @@
 package com.plaintext
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -9,7 +10,9 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
+
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -85,6 +88,24 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import java.util.UUID
+
+data class CreateDocumentRequest(
+    val fileName: String,
+    val mimeType: String = DocumentStorage.getMimeTypeForFileName(fileName)
+)
+
+class DynamicCreateDocumentContract : ActivityResultContract<CreateDocumentRequest, Uri?>() {
+    override fun createIntent(context: Context, input: CreateDocumentRequest): Intent {
+        return Intent(Intent.ACTION_CREATE_DOCUMENT)
+            .setType(input.mimeType)
+            .putExtra(Intent.EXTRA_TITLE, input.fileName)
+    }
+
+    override fun parseResult(resultCode: Int, intent: Intent?): Uri? {
+        return intent.takeIf { resultCode == Activity.RESULT_OK }?.data
+    }
+}
 
 class MainActivity : ComponentActivity() {
     private var externalUriState by mutableStateOf<Uri?>(null)
@@ -125,13 +146,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun tryPersistUriPermission(uri: Uri, flags: Int) {
+        val wantFlags = flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        if (wantFlags == 0) return
         try {
-            val takeFlags = flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            if (takeFlags != 0) {
-                contentResolver.takePersistableUriPermission(uri, takeFlags)
-            }
-        } catch (_: Exception) {
-            // Non-persistable URIs (such as temporary FileProvider URIs) do not support persistable permissions.
+            contentResolver.takePersistableUriPermission(uri, wantFlags)
+            return
+        } catch (_: Exception) {}
+
+        if ((wantFlags and Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0) {
+            try {
+                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (_: Exception) {}
         }
     }
 }
@@ -325,13 +350,17 @@ private fun EditorScreen(
                     uri,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 )
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+                try {
+                    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (_: Exception) {}
+            }
             loadFromUri(uri)
         }
     }
 
     val createDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("text/plain")
+        contract = DynamicCreateDocumentContract()
     ) { uri: Uri? ->
         if (uri != null) {
             try {
@@ -339,13 +368,20 @@ private fun EditorScreen(
                     uri,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 )
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+                try {
+                    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (_: Exception) {}
+            }
             coroutineScope.launch {
                 try {
                     DocumentStorage.writeTextToUri(contentResolver, uri, textFieldValue.text)
                     val name = DocumentStorage.queryDisplayName(contentResolver, uri) ?: currentSession.fileName
+                    val targetSessionId = currentSession.id
+                    val idx = sessions.indexOfFirst { it.id == targetSessionId }
+                    val targetIdx = if (idx != -1) idx else safeIndex
                     val updated = sessions.toMutableList()
-                    updated[safeIndex] = updated[safeIndex].copy(
+                    updated[targetIdx] = updated[targetIdx].copy(
                         lastSavedText = textFieldValue.text,
                         currentFileUri = uri,
                         fileName = name
@@ -361,14 +397,23 @@ private fun EditorScreen(
         }
     }
 
+    fun launchSaveAs(fileName: String) {
+        val safeName = fileName.ifBlank { "Untitled.txt" }
+        val mimeType = DocumentStorage.getMimeTypeForFileName(safeName)
+        createDocumentLauncher.launch(CreateDocumentRequest(fileName = safeName, mimeType = mimeType))
+    }
+
     fun saveDocument() {
         val uri = currentSession.currentFileUri
+        val targetSessionId = currentSession.id
         if (uri != null) {
             coroutineScope.launch {
                 try {
                     DocumentStorage.writeTextToUri(contentResolver, uri, textFieldValue.text)
+                    val idx = sessions.indexOfFirst { it.id == targetSessionId }
+                    val targetIdx = if (idx != -1) idx else safeIndex
                     val updated = sessions.toMutableList()
-                    updated[safeIndex] = updated[safeIndex].copy(
+                    updated[targetIdx] = updated[targetIdx].copy(
                         lastSavedText = textFieldValue.text
                     )
                     sessions = updated
@@ -377,16 +422,16 @@ private fun EditorScreen(
                     snackbarHostState.showSnackbar(
                         message = "File is read-only. Please choose a location to save a copy."
                     )
-                    createDocumentLauncher.launch(currentSession.fileName.ifBlank { "Untitled.txt" })
+                    launchSaveAs(currentSession.fileName)
                 }
             }
         } else {
-            createDocumentLauncher.launch(currentSession.fileName.ifBlank { "Untitled.txt" })
+            launchSaveAs(currentSession.fileName)
         }
     }
 
     fun saveAsDocument() {
-        createDocumentLauncher.launch(currentSession.fileName.ifBlank { "Untitled.txt" })
+        launchSaveAs(currentSession.fileName)
     }
 
     fun shareCurrentDocument() {

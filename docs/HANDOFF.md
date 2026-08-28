@@ -34,8 +34,9 @@ The app provides a complete, production-ready, minimal plain-text editor with:
 - **Robust File Storage (`DocumentStorage`)**:
   - Automatic UTF-8 BOM (`\uFEFF`) detection and sanitization.
   - Fallback encoding decoding for non-standard UTF-8 files.
-  - Multi-mode stream opening (`wt`, `w`, default) for maximum ContentProvider compatibility.
-  - Persistable URI permission acquisition across intents and SAF launchers.
+  - Dynamic MIME type resolution based on file extension (`.md`, `.json`, `.csv`, `.yaml`, etc.) to prevent `.txt` extension mangling.
+  - Fast-fail permission denial handling in multi-mode stream opening (`wt`, `w`, default) for maximum ContentProvider compatibility and zero IPC delay.
+  - Persistable URI permission acquisition across intents and SAF launchers with granular fallback.
   - Smart save fallback: Automatically routes to `CreateDocument` if an external file is read-only.
   - Maximum safe file size protection (10MB limit) to prevent out-of-memory crashes.
 - **Editor Features**:

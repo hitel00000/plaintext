@@ -50,13 +50,46 @@ object DocumentStorage {
             } ?: throw IllegalStateException("Unable to open input stream for URI")
         }
 
+    fun getMimeTypeForFileName(fileName: String): String {
+        val extension = fileName.substringAfterLast('.', "").lowercase()
+        if (extension.isEmpty()) return "text/plain"
+
+        val mimeFromMap = try {
+            android.webkit.MimeTypeMap.getSingleton()?.getMimeTypeFromExtension(extension)
+        } catch (_: Exception) {
+            null
+        }
+        if (!mimeFromMap.isNullOrBlank()) {
+            return mimeFromMap
+        }
+
+        return when (extension) {
+            "md", "markdown" -> "text/markdown"
+            "json" -> "application/json"
+            "yaml", "yml" -> "text/yaml"
+            "xml" -> "text/xml"
+            "csv" -> "text/csv"
+            "tsv" -> "text/tab-separated-values"
+            "html", "htm" -> "text/html"
+            "css" -> "text/css"
+            "js" -> "text/javascript"
+            "log", "txt", "conf", "ini", "properties" -> "text/plain"
+            else -> "*/*"
+        }
+    }
+
     suspend fun writeTextToUri(contentResolver: ContentResolver, uri: Uri, text: String): Unit =
         withContext(Dispatchers.IO) {
             val outputStream = try {
                 contentResolver.openOutputStream(uri, "wt")
+            } catch (e: SecurityException) {
+                // Fast-fail on permission denial: avoid slow retries across IPC
+                throw e
             } catch (_: Exception) {
                 try {
                     contentResolver.openOutputStream(uri, "w")
+                } catch (e: SecurityException) {
+                    throw e
                 } catch (_: Exception) {
                     contentResolver.openOutputStream(uri)
                 }

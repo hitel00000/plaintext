@@ -1,4 +1,4 @@
-﻿package com.plaintext
+package com.plaintext
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -49,5 +49,22 @@ class DocumentStorageTest {
 
         val decoded = DocumentStorage.decodeBytesToText(bytes)
         assertEquals(originalText, decoded)
+    }
+
+    @Test
+    fun getMimeTypeForFileName_mapsExtensionsCorrectly() {
+        assertEquals("text/markdown", DocumentStorage.getMimeTypeForFileName("README.md"))
+        assertEquals("text/markdown", DocumentStorage.getMimeTypeForFileName("doc.markdown"))
+        assertEquals("text/plain", DocumentStorage.getMimeTypeForFileName("note.txt"))
+        assertEquals("text/plain", DocumentStorage.getMimeTypeForFileName("Untitled"))
+        assertEquals("application/json", DocumentStorage.getMimeTypeForFileName("data.json"))
+        assertEquals("text/yaml", DocumentStorage.getMimeTypeForFileName("config.yaml"))
+        assertEquals("text/yaml", DocumentStorage.getMimeTypeForFileName("config.yml"))
+        assertEquals("text/csv", DocumentStorage.getMimeTypeForFileName("table.csv"))
+        assertEquals("text/xml", DocumentStorage.getMimeTypeForFileName("manifest.xml"))
+        assertEquals("text/html", DocumentStorage.getMimeTypeForFileName("index.html"))
+        assertEquals("text/css", DocumentStorage.getMimeTypeForFileName("style.css"))
+        assertEquals("text/javascript", DocumentStorage.getMimeTypeForFileName("script.js"))
+        assertEquals("*/*", DocumentStorage.getMimeTypeForFileName("file.unknownext123"))
     }
 }
