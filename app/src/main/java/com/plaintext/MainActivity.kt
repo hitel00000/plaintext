@@ -1,11 +1,9 @@
 package com.plaintext
 
 import android.app.Activity
-import android.content.ContentResolver
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -13,12 +11,17 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,24 +38,25 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     private var externalUriState by mutableStateOf<Uri?>(null)
@@ -111,10 +115,15 @@ private fun EditorScreen(
     var lastSavedText by rememberSaveable { mutableStateOf("") }
     var currentFileUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     var fileName by rememberSaveable { mutableStateOf("Untitled.txt") }
+    var isMonospace by rememberSaveable { mutableStateOf(false) }
+
+    var showMenu by remember { mutableStateOf(false) }
     var showNewConfirmDialog by remember { mutableStateOf(false) }
     var showExitConfirmDialog by remember { mutableStateOf(false) }
 
     val isModified = documentText != lastSavedText
+    val wordCount by remember { derivedStateOf { DocumentStorage.countWords(documentText) } }
+    val charCount by remember { derivedStateOf { DocumentStorage.countCharacters(documentText) } }
 
     BackHandler(enabled = isModified) {
         showExitConfirmDialog = true
@@ -123,8 +132,8 @@ private fun EditorScreen(
     fun loadFromUri(uri: Uri) {
         coroutineScope.launch {
             try {
-                val content = readTextFromUri(contentResolver, uri)
-                val name = queryDisplayName(contentResolver, uri) ?: "Document.txt"
+                val content = DocumentStorage.readTextFromUri(contentResolver, uri)
+                val name = DocumentStorage.queryDisplayName(contentResolver, uri) ?: "Document.txt"
                 documentText = content
                 lastSavedText = content
                 currentFileUri = uri
@@ -158,8 +167,8 @@ private fun EditorScreen(
         if (uri != null) {
             coroutineScope.launch {
                 try {
-                    writeTextToUri(contentResolver, uri, documentText)
-                    val name = queryDisplayName(contentResolver, uri) ?: fileName
+                    DocumentStorage.writeTextToUri(contentResolver, uri, documentText)
+                    val name = DocumentStorage.queryDisplayName(contentResolver, uri) ?: fileName
                     lastSavedText = documentText
                     currentFileUri = uri
                     fileName = name
@@ -178,7 +187,7 @@ private fun EditorScreen(
         if (uri != null) {
             coroutineScope.launch {
                 try {
-                    writeTextToUri(contentResolver, uri, documentText)
+                    DocumentStorage.writeTextToUri(contentResolver, uri, documentText)
                     lastSavedText = documentText
                     snackbarHostState.showSnackbar("Saved $fileName")
                 } catch (e: Exception) {
@@ -190,6 +199,10 @@ private fun EditorScreen(
         } else {
             createDocumentLauncher.launch(fileName.ifBlank { "Untitled.txt" })
         }
+    }
+
+    fun saveAsDocument() {
+        createDocumentLauncher.launch(fileName.ifBlank { "Untitled.txt" })
     }
 
     fun performNewDocument() {
@@ -286,6 +299,33 @@ private fun EditorScreen(
                             contentDescription = "Save Document"
                         )
                     }
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "More options"
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Save As…") },
+                                onClick = {
+                                    showMenu = false
+                                    saveAsDocument()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (isMonospace) "Default Font" else "Monospace Font") },
+                                onClick = {
+                                    showMenu = false
+                                    isMonospace = !isMonospace
+                                }
+                            )
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
@@ -294,7 +334,7 @@ private fun EditorScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
@@ -304,7 +344,8 @@ private fun EditorScreen(
                 value = documentText,
                 onValueChange = { documentText = it },
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
+                    .weight(1f)
                     .padding(horizontal = 4.dp),
                 placeholder = {
                     Text(
@@ -312,6 +353,7 @@ private fun EditorScreen(
                         style = MaterialTheme.typography.bodyLarge.copy(
                             fontSize = 16.sp,
                             lineHeight = 24.sp,
+                            fontFamily = if (isMonospace) FontFamily.Monospace else FontFamily.Default,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         )
                     )
@@ -319,6 +361,7 @@ private fun EditorScreen(
                 textStyle = MaterialTheme.typography.bodyLarge.copy(
                     fontSize = 16.sp,
                     lineHeight = 24.sp,
+                    fontFamily = if (isMonospace) FontFamily.Monospace else FontFamily.Default,
                     color = MaterialTheme.colorScheme.onSurface
                 ),
                 colors = TextFieldDefaults.colors(
@@ -330,37 +373,17 @@ private fun EditorScreen(
                     disabledIndicatorColor = Color.Transparent
                 )
             )
+
+            // Minimal bottom status info (word & character count)
+            Text(
+                text = "$wordCount words · $charCount chars",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier
+                    .align(Alignment.End)
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+            )
         }
-    }
-}
-
-private suspend fun readTextFromUri(contentResolver: ContentResolver, uri: Uri): String =
-    withContext(Dispatchers.IO) {
-        contentResolver.openInputStream(uri)?.use { stream ->
-            stream.bufferedReader(Charsets.UTF_8).readText()
-        } ?: throw IllegalStateException("Unable to open input stream")
-    }
-
-private suspend fun writeTextToUri(contentResolver: ContentResolver, uri: Uri, text: String): Unit =
-    withContext(Dispatchers.IO) {
-        contentResolver.openOutputStream(uri, "wt")?.use { stream ->
-            stream.bufferedWriter(Charsets.UTF_8).use { writer ->
-                writer.write(text)
-                writer.flush()
-            }
-        } ?: throw IllegalStateException("Unable to open output stream")
-    }
-
-private fun queryDisplayName(contentResolver: ContentResolver, uri: Uri): String? {
-    return try {
-        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (index != -1) cursor.getString(index) else null
-            } else null
-        }
-    } catch (_: Exception) {
-        null
     }
 }
 
