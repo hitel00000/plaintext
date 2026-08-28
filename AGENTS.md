@@ -19,3 +19,4 @@ Read `docs/HANDOFF.md` for the current project state and immediate work.
 - Build/test after meaningful changes.
 - Prefer focused commits.
 - Update `docs/HANDOFF.md` when project state or direction changes.
+- Write release notes in `docs/release-notes/<tag>.md` before tagging a release.

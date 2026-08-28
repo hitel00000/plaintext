@@ -50,7 +50,8 @@ The app provides a complete, production-ready, minimal plain-text editor with:
 - **Release Optimization & CI/CD**:
   - Configured ProGuard/R8 code and resource shrinking for minimal release APK footprint.
   - Set release APK output filename directly to `plaintext.apk`.
-  - Configured GitHub Actions CI/CD workflow (`.github/workflows/build.yml`) to automatically build and upload `plaintext.apk` artifacts and attach to GitHub Releases on tag push.
+  - Configured GitHub Actions CI/CD workflow (`.github/workflows/build.yml`) to automatically build and upload `plaintext.apk` artifacts.
+  - **Custom Release Notes**: Automatically sources release body from `docs/release-notes/<tag>.md` on tag release.
 - **BackHandler Protection**: Intercepts back gestures when changes are unsaved.
 - **Comprehensive Unit Testing**: JVM unit tests for BOM sanitization, word/character counting, and UTF-8 decoding.
 
