@@ -18,22 +18,20 @@ PlainText is a deliberately minimal Android plain-text editor.
 
 ## Current state
 
-The initial Android project has been created with Kotlin and Jetpack Compose.
+The Android project is built with Kotlin and Jetpack Compose.
 
-The app currently provides a placeholder editor screen with:
+The app provides a functional minimal plain-text editor with:
 
-- A text editing area occupying most of the screen.
-- Placeholder Open and Save buttons.
-- A current file name placeholder.
+- Text editing area for UTF-8 plain text.
+- Storage Access Framework (SAF) flow:
+  - **New**: Resets the current document.
+  - **Open**: Uses `OpenDocument` to read text files and display their filename.
+  - **Save**: Saves directly to the existing document `Uri` or launches `CreateDocument` for new files.
+- Basic error handling and feedback via `Snackbar`.
+- Document text and file metadata preserved across configuration/lifecycle changes with `rememberSaveable`.
 
 ## Next task
 
-Implement the minimal Storage Access Framework flow:
-
-1. Create/open a text document.
-2. Edit UTF-8 text.
-3. Save the current document.
-4. Handle basic file errors gracefully.
-5. Preserve unsaved text across basic lifecycle changes.
-
-Keep the implementation small and avoid speculative editor features.
+- Refine editor UX details (e.g., keyboard handling, insets/padding refinement, dirty state indication).
+- Verify edge cases in file reading/writing (e.g., empty files, non-UTF-8 encodings fallback).
+- Keep changes minimal and aligned with core principles.
