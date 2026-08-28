@@ -11,26 +11,41 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -39,9 +54,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -49,6 +66,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -156,37 +174,115 @@ private fun EditorScreen(
     val verticalScrollState = rememberScrollState()
     val horizontalScrollState = rememberScrollState()
 
-    var textFieldValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
-        mutableStateOf(TextFieldValue(""))
+    var sessions by rememberSaveable {
+        mutableStateOf(listOf(DocumentSession.createNew("Untitled.txt")))
     }
-    var lastSavedText by rememberSaveable { mutableStateOf("") }
-    var currentFileUri by rememberSaveable { mutableStateOf<Uri?>(null) }
-    var fileName by rememberSaveable { mutableStateOf("Untitled.txt") }
+    var activeIndex by rememberSaveable { mutableIntStateOf(0) }
+
+    val safeIndex = activeIndex.coerceIn(0, (sessions.size - 1).coerceAtLeast(0))
+    val currentSession = if (sessions.isNotEmpty()) sessions[safeIndex] else DocumentSession.createNew()
+
+    var textFieldValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(currentSession.toTextFieldValue())
+    }
     var isMonospace by rememberSaveable { mutableStateOf(false) }
     var isWordWrap by rememberSaveable { mutableStateOf(true) }
 
     var showMenu by remember { mutableStateOf(false) }
-    var showNewConfirmDialog by remember { mutableStateOf(false) }
+    var showSwitcherSheet by remember { mutableStateOf(false) }
     var showExitConfirmDialog by remember { mutableStateOf(false) }
+    var sessionToCloseIndex by remember { mutableStateOf<Int?>(null) }
 
-    val documentText = textFieldValue.text
-    val isModified = documentText != lastSavedText
-    val wordCount = DocumentStorage.countWords(documentText)
-    val charCount = DocumentStorage.countCharacters(documentText)
+    fun syncCurrentSessionToState(value: TextFieldValue = textFieldValue) {
+        if (sessions.isNotEmpty() && safeIndex in sessions.indices) {
+            val updated = sessions.toMutableList()
+            updated[safeIndex] = updated[safeIndex].copy(
+                text = value.text,
+                selectionStart = value.selection.start,
+                selectionEnd = value.selection.end
+            )
+            sessions = updated
+        }
+    }
 
-    BackHandler(enabled = isModified) {
-        showExitConfirmDialog = true
+    fun switchToSession(index: Int) {
+        syncCurrentSessionToState()
+        val targetIndex = index.coerceIn(0, sessions.size - 1)
+        activeIndex = targetIndex
+        val targetSession = sessions[targetIndex]
+        textFieldValue = targetSession.toTextFieldValue()
+        showSwitcherSheet = false
+    }
+
+    fun createNewDocument() {
+        syncCurrentSessionToState()
+        val newTitle = "Untitled ${sessions.size + 1}.txt"
+        val newSession = DocumentSession.createNew(newTitle)
+        sessions = sessions + newSession
+        activeIndex = sessions.size - 1
+        textFieldValue = newSession.toTextFieldValue()
+        showSwitcherSheet = false
+    }
+
+    fun closeSession(indexToClose: Int, force: Boolean = false) {
+        if (indexToClose !in sessions.indices) return
+        val target = sessions[indexToClose]
+        if (!force && target.isModified) {
+            sessionToCloseIndex = indexToClose
+            return
+        }
+
+        val updated = sessions.toMutableList()
+        updated.removeAt(indexToClose)
+
+        if (updated.isEmpty()) {
+            val fresh = DocumentSession.createNew("Untitled.txt")
+            sessions = listOf(fresh)
+            activeIndex = 0
+            textFieldValue = fresh.toTextFieldValue()
+        } else {
+            sessions = updated
+            val newActive = when {
+                safeIndex >= updated.size -> updated.size - 1
+                indexToClose < safeIndex -> safeIndex - 1
+                else -> safeIndex
+            }
+            activeIndex = newActive
+            textFieldValue = updated[newActive].toTextFieldValue()
+        }
     }
 
     fun loadFromUri(uri: Uri) {
+        syncCurrentSessionToState()
+        val existingIndex = sessions.indexOfFirst { it.currentFileUri == uri }
+        if (existingIndex != -1) {
+            switchToSession(existingIndex)
+            return
+        }
+
         coroutineScope.launch {
             try {
                 val content = DocumentStorage.readTextFromUri(contentResolver, uri)
                 val name = DocumentStorage.queryDisplayName(contentResolver, uri) ?: "Document.txt"
-                textFieldValue = TextFieldValue(content, TextRange.Zero)
-                lastSavedText = content
-                currentFileUri = uri
-                fileName = name
+                val newSession = DocumentSession(
+                    text = content,
+                    selectionStart = 0,
+                    selectionEnd = 0,
+                    lastSavedText = content,
+                    currentFileUri = uri,
+                    fileName = name
+                )
+
+                // Replace if currently single pristine empty untitled file
+                if (sessions.size == 1 && currentSession.currentFileUri == null && currentSession.text.isEmpty()) {
+                    sessions = listOf(newSession)
+                    activeIndex = 0
+                    textFieldValue = newSession.toTextFieldValue()
+                } else {
+                    sessions = sessions + newSession
+                    activeIndex = sessions.size - 1
+                    textFieldValue = newSession.toTextFieldValue()
+                }
             } catch (e: Exception) {
                 snackbarHostState.showSnackbar(
                     message = "Failed to open file: ${e.localizedMessage ?: "Unknown error"}"
@@ -204,10 +300,18 @@ private fun EditorScreen(
 
     LaunchedEffect(sharedText) {
         if (sharedText != null) {
-            textFieldValue = TextFieldValue(sharedText, TextRange.Zero)
-            lastSavedText = ""
-            currentFileUri = null
-            fileName = "Shared.txt"
+            syncCurrentSessionToState()
+            val newSession = DocumentSession(
+                text = sharedText,
+                selectionStart = 0,
+                selectionEnd = 0,
+                lastSavedText = "",
+                currentFileUri = null,
+                fileName = "Shared.txt"
+            )
+            sessions = sessions + newSession
+            activeIndex = sessions.size - 1
+            textFieldValue = newSession.toTextFieldValue()
             onSharedTextConsumed()
         }
     }
@@ -238,11 +342,15 @@ private fun EditorScreen(
             } catch (_: Exception) {}
             coroutineScope.launch {
                 try {
-                    DocumentStorage.writeTextToUri(contentResolver, uri, documentText)
-                    val name = DocumentStorage.queryDisplayName(contentResolver, uri) ?: fileName
-                    lastSavedText = documentText
-                    currentFileUri = uri
-                    fileName = name
+                    DocumentStorage.writeTextToUri(contentResolver, uri, textFieldValue.text)
+                    val name = DocumentStorage.queryDisplayName(contentResolver, uri) ?: currentSession.fileName
+                    val updated = sessions.toMutableList()
+                    updated[safeIndex] = updated[safeIndex].copy(
+                        lastSavedText = textFieldValue.text,
+                        currentFileUri = uri,
+                        fileName = name
+                    )
+                    sessions = updated
                     snackbarHostState.showSnackbar("Saved $name")
                 } catch (e: Exception) {
                     snackbarHostState.showSnackbar(
@@ -254,83 +362,61 @@ private fun EditorScreen(
     }
 
     fun saveDocument() {
-        val uri = currentFileUri
+        val uri = currentSession.currentFileUri
         if (uri != null) {
             coroutineScope.launch {
                 try {
-                    DocumentStorage.writeTextToUri(contentResolver, uri, documentText)
-                    lastSavedText = documentText
-                    snackbarHostState.showSnackbar("Saved $fileName")
+                    DocumentStorage.writeTextToUri(contentResolver, uri, textFieldValue.text)
+                    val updated = sessions.toMutableList()
+                    updated[safeIndex] = updated[safeIndex].copy(
+                        lastSavedText = textFieldValue.text
+                    )
+                    sessions = updated
+                    snackbarHostState.showSnackbar("Saved ${currentSession.fileName}")
                 } catch (e: Exception) {
-                    // Fallback to CreateDocument if writing to existing URI fails (e.g. read-only external file)
                     snackbarHostState.showSnackbar(
                         message = "File is read-only. Please choose a location to save a copy."
                     )
-                    createDocumentLauncher.launch(fileName.ifBlank { "Untitled.txt" })
+                    createDocumentLauncher.launch(currentSession.fileName.ifBlank { "Untitled.txt" })
                 }
             }
         } else {
-            createDocumentLauncher.launch(fileName.ifBlank { "Untitled.txt" })
+            createDocumentLauncher.launch(currentSession.fileName.ifBlank { "Untitled.txt" })
         }
     }
 
     fun saveAsDocument() {
-        createDocumentLauncher.launch(fileName.ifBlank { "Untitled.txt" })
+        createDocumentLauncher.launch(currentSession.fileName.ifBlank { "Untitled.txt" })
     }
 
     fun shareCurrentDocument() {
         val sendIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, documentText)
-            putExtra(Intent.EXTRA_SUBJECT, fileName)
+            putExtra(Intent.EXTRA_TEXT, textFieldValue.text)
+            putExtra(Intent.EXTRA_SUBJECT, currentSession.fileName)
         }
         val shareChooser = Intent.createChooser(sendIntent, "Share text via")
         context.startActivity(shareChooser)
     }
 
-    fun performNewDocument() {
-        textFieldValue = TextFieldValue("")
-        lastSavedText = ""
-        currentFileUri = null
-        fileName = "Untitled.txt"
-    }
+    val documentText = textFieldValue.text
+    val isModified = documentText != currentSession.lastSavedText
+    val wordCount = DocumentStorage.countWords(documentText)
+    val charCount = DocumentStorage.countCharacters(documentText)
 
-    fun onNewClicked() {
+    BackHandler(enabled = isModified || sessions.size > 1) {
         if (isModified) {
-            showNewConfirmDialog = true
-        } else {
-            performNewDocument()
+            showExitConfirmDialog = true
+        } else if (sessions.size > 1) {
+            showSwitcherSheet = true
         }
-    }
-
-    if (showNewConfirmDialog) {
-        AlertDialog(
-            onDismissRequest = { showNewConfirmDialog = false },
-            title = { Text("Discard changes?") },
-            text = { Text("You have unsaved changes. Creating a new document will discard them.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showNewConfirmDialog = false
-                        performNewDocument()
-                    }
-                ) {
-                    Text("Discard")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNewConfirmDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
     }
 
     if (showExitConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showExitConfirmDialog = false },
             title = { Text("Exit without saving?") },
-            text = { Text("You have unsaved changes. Exiting now will discard them.") },
+            text = { Text("You have unsaved changes in '${currentSession.fileName}'. Exiting now will discard them.") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -349,22 +435,164 @@ private fun EditorScreen(
         )
     }
 
-    val displayName = if (isModified) "$fileName •" else fileName
+    sessionToCloseIndex?.let { closeIdx ->
+        val doc = sessions.getOrNull(closeIdx)
+        if (doc != null) {
+            AlertDialog(
+                onDismissRequest = { sessionToCloseIndex = null },
+                title = { Text("Discard '${doc.fileName}'?") },
+                text = { Text("This document has unsaved changes. Closing it will discard them.") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            sessionToCloseIndex = null
+                            closeSession(closeIdx, force = true)
+                        }
+                    ) {
+                        Text("Discard & Close")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { sessionToCloseIndex = null }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+    }
+
+    val sheetState = rememberModalBottomSheetState()
+    if (showSwitcherSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSwitcherSheet = false },
+            sheetState = sheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Open Documents (${sessions.size})",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                    IconButton(onClick = { createNewDocument() }) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "New Document",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 24.dp)
+                ) {
+                    itemsIndexed(sessions, key = { _, s -> s.id }) { idx, session ->
+                        val isSelected = idx == safeIndex
+                        val sessionModified = if (isSelected) isModified else session.isModified
+                        val sessionWords = if (isSelected) wordCount else DocumentStorage.countWords(session.text)
+                        val sessionChars = if (isSelected) charCount else DocumentStorage.countCharacters(session.text)
+
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clickable { switchToSession(idx) },
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isSelected) {
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                }
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = if (sessionModified) "${session.fileName} •" else session.fileName,
+                                        style = MaterialTheme.typography.bodyLarge.copy(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        ),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "$sessionWords words · $sessionChars chars",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { closeSession(idx) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Close Document",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    val displayName = if (isModified) "${currentSession.fileName} •" else currentSession.fileName
 
     Scaffold(
         modifier = modifier,
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = displayName,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
-                    )
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { showSwitcherSheet = true }
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = displayName,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Switch Document",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 },
                 actions = {
-                    IconButton(onClick = { onNewClicked() }) {
+                    IconButton(onClick = { createNewDocument() }) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = "New Document"
@@ -441,7 +669,10 @@ private fun EditorScreen(
 
             BasicTextField(
                 value = textFieldValue,
-                onValueChange = { textFieldValue = it },
+                onValueChange = {
+                    textFieldValue = it
+                    syncCurrentSessionToState(it)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)

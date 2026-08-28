@@ -39,11 +39,13 @@ The app provides a complete, production-ready, minimal plain-text editor with:
   - Smart save fallback: Automatically routes to `CreateDocument` if an external file is read-only.
   - Maximum safe file size protection (10MB limit) to prevent out-of-memory crashes.
 - **Editor Features**:
+  - **Title Document Switcher**: Minimal bottom sheet switcher opened by tapping the top app bar title (`FileName.txt ▾`), allowing seamless navigation between multiple open documents without intrusive tab bars.
+  - **Multi-Document Session Management**: Supports creating (`+`) multiple documents simultaneously while keeping drafts, undo states, and cursor positions alive in memory.
   - **Visual Scrollbar Indicator**: Custom minimalist vertical scrollbar rendered dynamically during scrolling.
   - **Scroll & Cursor Preservation**: Uses `TextFieldValue` with explicit `verticalScrollState` so scroll and cursor positions are seamlessly preserved when the soft keyboard appears or disappears.
   - **Monospace Font Toggle**: Switch between default system font and monospace font.
   - **Word Wrap Toggle**: Toggle horizontal scrolling on/off for log files and code.
-  - **Text Statistics**: Subtle word and character counts displayed at the bottom.
+  - **Text Statistics**: Real-time dynamic word and character counts displayed at the bottom.
 - **Adaptive App Icons**: Custom monochrome minimalist document icon design (`ic_launcher` / `ic_launcher_round`).
 - **Release Optimization & CI/CD**:
   - Configured ProGuard/R8 code and resource shrinking for minimal release APK footprint.
