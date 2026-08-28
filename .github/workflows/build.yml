@@ -1,4 +1,4 @@
-﻿name: Build and Release PlainText
+name: Build and Release PlainText
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
       - main
     tags:
       - 'v*'
+      - '[0-9]+.*'
   pull_request:
     branches:
       - main
@@ -16,7 +17,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Release APK
+    name: Build and Release APK
     runs-on: ubuntu-latest
 
     steps:
@@ -47,8 +48,14 @@ jobs:
           if-no-files-found: error
 
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          name: Release ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
           files: app/build/outputs/apk/release/plaintext.apk
           generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
