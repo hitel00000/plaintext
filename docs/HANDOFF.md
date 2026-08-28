@@ -40,21 +40,23 @@ The app provides a complete, production-ready, minimal plain-text editor with:
   - Smart save fallback: Automatically routes to `CreateDocument` if an external file is read-only.
   - Maximum safe file size protection (10MB limit) to prevent out-of-memory crashes.
 - **Editor Features**:
-  - **Title Document Switcher**: Minimal bottom sheet switcher opened by tapping the top app bar title (`FileName.txt ▾`), allowing seamless navigation between multiple open documents without intrusive tab bars.
+  - **Zero-Dependency Markdown Preview**: Seamless toggle between raw text editor and rendered Markdown (`MarkdownView`) with support for headings, bold/italic/strikethrough/code/links, code blocks, blockquotes, lists, and horizontal dividers.
+  - **Filtered Document Open**: Standardizes SAF file picking to text-based MIME types (`text/*`, `application/json`, `application/xml`, `application/yaml`, `application/javascript`, `application/toml`, etc.) with optional "Open Any File (*/*)" action in overflow menu.
+  - **Polished Title Document Switcher**: Rich bottom sheet switcher featuring visual file extension badges (`MD`, `TXT`, `JSON`, `YAML`, etc.), real-time word/character/line count stats, unsaved state chips, and active indicator outlines with quick open/create actions.
   - **Multi-Document Session Management**: Supports creating (`+`) multiple documents simultaneously while keeping drafts, undo states, and cursor positions alive in memory.
   - **Visual Scrollbar Indicator**: Custom minimalist vertical scrollbar rendered dynamically during scrolling.
   - **Scroll & Cursor Preservation**: Uses `TextFieldValue` with explicit `verticalScrollState` so scroll and cursor positions are seamlessly preserved when the soft keyboard appears or disappears.
   - **Monospace Font Toggle**: Switch between default system font and monospace font.
   - **Word Wrap Toggle**: Toggle horizontal scrolling on/off for log files and code.
-  - **Text Statistics**: Real-time dynamic word and character counts displayed at the bottom.
+  - **Text Statistics**: Real-time dynamic word, character, and line counts displayed at the bottom.
 - **Adaptive App Icons**: Custom monochrome minimalist document icon design (`ic_launcher` / `ic_launcher_round`).
 - **Release Optimization & CI/CD**:
   - Configured ProGuard/R8 code and resource shrinking for minimal release APK footprint.
   - Set release APK output filename directly to `plaintext.apk`.
   - Configured GitHub Actions CI/CD workflow (`.github/workflows/build.yml`) to automatically build and upload `plaintext.apk` artifacts.
   - **Custom Release Notes**: Automatically sources release body from `docs/release-notes/<tag>.md` on tag release.
-- **BackHandler Protection**: Intercepts back gestures when changes are unsaved.
-- **Comprehensive Unit Testing**: JVM unit tests for BOM sanitization, word/character counting, and UTF-8 decoding.
+- **BackHandler Protection**: Intercepts back gestures when changes are unsaved or when markdown preview is active.
+- **Comprehensive Unit Testing**: JVM unit tests for BOM sanitization, word/character/line counting, UTF-8 decoding, dynamic MIME type resolution, and Markdown block parsing.
 
 ## Next task
 

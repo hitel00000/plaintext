@@ -33,6 +33,13 @@ class DocumentStorageTest {
     }
 
     @Test
+    fun countLines_calculatesCorrectly() {
+        assertEquals(1, DocumentStorage.countLines(""))
+        assertEquals(1, DocumentStorage.countLines("Single line"))
+        assertEquals(3, DocumentStorage.countLines("Line 1\nLine 2\nLine 3"))
+    }
+
+    @Test
     fun decodeBytesToText_handlesUtf8WithBom() {
         val originalText = "Hello PlainText"
         val utf8Bytes = originalText.toByteArray(StandardCharsets.UTF_8)

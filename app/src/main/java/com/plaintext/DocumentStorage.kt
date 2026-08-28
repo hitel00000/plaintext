@@ -12,6 +12,22 @@ import java.nio.charset.StandardCharsets
 object DocumentStorage {
     const val MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024L // 10MB limit
 
+    val TEXT_DOCUMENT_MIME_TYPES = arrayOf(
+        "text/*",
+        "application/json",
+        "application/xml",
+        "application/yaml",
+        "application/x-yaml",
+        "application/javascript",
+        "application/x-javascript",
+        "application/toml",
+        "application/x-sh",
+        "application/sql",
+        "application/csv"
+    )
+
+    val ALL_FILES_MIME_TYPES = arrayOf("*/*")
+
     fun sanitizeBom(text: String): String {
         return if (text.startsWith("\uFEFF")) {
             text.substring(1)
@@ -27,6 +43,11 @@ object DocumentStorage {
 
     fun countCharacters(text: String): Int {
         return text.length
+    }
+
+    fun countLines(text: String): Int {
+        if (text.isEmpty()) return 1
+        return text.count { it == '\n' } + 1
     }
 
     suspend fun readTextFromUri(contentResolver: ContentResolver, uri: Uri): String =

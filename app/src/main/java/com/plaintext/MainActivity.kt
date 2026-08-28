@@ -13,6 +13,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -212,6 +213,7 @@ private fun EditorScreen(
     }
     var isMonospace by rememberSaveable { mutableStateOf(false) }
     var isWordWrap by rememberSaveable { mutableStateOf(true) }
+    var isMarkdownPreview by rememberSaveable { mutableStateOf(false) }
 
     var showMenu by remember { mutableStateOf(false) }
     var showSwitcherSheet by remember { mutableStateOf(false) }
@@ -448,9 +450,12 @@ private fun EditorScreen(
     val isModified = documentText != currentSession.lastSavedText
     val wordCount = DocumentStorage.countWords(documentText)
     val charCount = DocumentStorage.countCharacters(documentText)
+    val lineCount = DocumentStorage.countLines(documentText)
 
-    BackHandler(enabled = isModified || sessions.size > 1) {
-        if (isModified) {
+    BackHandler(enabled = isModified || sessions.size > 1 || isMarkdownPreview) {
+        if (isMarkdownPreview) {
+            isMarkdownPreview = false
+        } else if (isModified) {
             showExitConfirmDialog = true
         } else if (sessions.size > 1) {
             showSwitcherSheet = true
@@ -526,12 +531,26 @@ private fun EditorScreen(
                         text = "Open Documents (${sessions.size})",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
-                    IconButton(onClick = { createNewDocument() }) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "New Document",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = {
+                                showSwitcherSheet = false
+                                openDocumentLauncher.launch(DocumentStorage.TEXT_DOCUMENT_MIME_TYPES)
+                            }
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_folder_open),
+                                contentDescription = "Open Document",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        IconButton(onClick = { createNewDocument() }) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "New Document",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
 
@@ -547,6 +566,7 @@ private fun EditorScreen(
                         val sessionModified = if (isSelected) isModified else session.isModified
                         val sessionWords = if (isSelected) wordCount else DocumentStorage.countWords(session.text)
                         val sessionChars = if (isSelected) charCount else DocumentStorage.countCharacters(session.text)
+                        val sessionLines = if (isSelected) lineCount else DocumentStorage.countLines(session.text)
 
                         Card(
                             modifier = Modifier
@@ -555,36 +575,63 @@ private fun EditorScreen(
                                 .clickable { switchToSession(idx) },
                             colors = CardDefaults.cardColors(
                                 containerColor = if (isSelected) {
-                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
                                 } else {
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
                                 }
                             ),
+                            border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)) else null,
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = if (sessionModified) "${session.fileName} •" else session.fileName,
-                                        style = MaterialTheme.typography.bodyLarge.copy(
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        ),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "$sessionWords words · $sessionChars chars",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                    )
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    FileExtensionBadge(session.fileName, isSelected)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = session.fileName,
+                                                style = MaterialTheme.typography.bodyLarge.copy(
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                                ),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f, fill = false)
+                                            )
+                                            if (sessionModified) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Surface(
+                                                    color = MaterialTheme.colorScheme.errorContainer,
+                                                    shape = RoundedCornerShape(4.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "Unsaved",
+                                                        style = MaterialTheme.typography.labelSmall.copy(
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.SemiBold
+                                                        ),
+                                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(3.dp))
+                                        Text(
+                                            text = "$sessionWords words · $sessionChars chars · $sessionLines lines",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                        )
+                                    }
                                 }
 
                                 IconButton(
@@ -643,7 +690,7 @@ private fun EditorScreen(
                             contentDescription = "New Document"
                         )
                     }
-                    IconButton(onClick = { openDocumentLauncher.launch(arrayOf("text/*", "*/*")) }) {
+                    IconButton(onClick = { openDocumentLauncher.launch(DocumentStorage.TEXT_DOCUMENT_MIME_TYPES) }) {
                         Icon(
                             painter = painterResource(R.drawable.ic_folder_open),
                             contentDescription = "Open Document"
@@ -653,6 +700,13 @@ private fun EditorScreen(
                         Icon(
                             painter = painterResource(R.drawable.ic_save),
                             contentDescription = "Save Document"
+                        )
+                    }
+                    IconButton(onClick = { isMarkdownPreview = !isMarkdownPreview }) {
+                        Icon(
+                            painter = painterResource(if (isMarkdownPreview) R.drawable.ic_edit else R.drawable.ic_preview),
+                            contentDescription = if (isMarkdownPreview) "Edit Mode" else "Preview Markdown",
+                            tint = if (isMarkdownPreview) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                         )
                     }
                     Box {
@@ -666,6 +720,20 @@ private fun EditorScreen(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false }
                         ) {
+                            DropdownMenuItem(
+                                text = { Text(if (isMarkdownPreview) "Edit Mode" else "Preview Markdown") },
+                                onClick = {
+                                    showMenu = false
+                                    isMarkdownPreview = !isMarkdownPreview
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Open Any File (*/*)…") },
+                                onClick = {
+                                    showMenu = false
+                                    openDocumentLauncher.launch(DocumentStorage.ALL_FILES_MIME_TYPES)
+                                }
+                            )
                             DropdownMenuItem(
                                 text = { Text("Save As…") },
                                 onClick = {
@@ -712,53 +780,62 @@ private fun EditorScreen(
         ) {
             val scrollbarColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
 
-            BasicTextField(
-                value = textFieldValue,
-                onValueChange = {
-                    textFieldValue = it
-                    syncCurrentSessionToState(it)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .drawScrollbar(verticalScrollState, color = scrollbarColor)
-                    .verticalScroll(verticalScrollState)
-                    .then(
-                        if (!isWordWrap) {
-                            Modifier.horizontalScroll(horizontalScrollState)
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                textStyle = MaterialTheme.typography.bodyLarge.copy(
-                    fontSize = 16.sp,
-                    lineHeight = 24.sp,
-                    fontFamily = if (isMonospace) FontFamily.Monospace else FontFamily.Default,
-                    color = MaterialTheme.colorScheme.onSurface
-                ),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                decorationBox = { innerTextField ->
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        if (documentText.isEmpty()) {
-                            Text(
-                                text = "Start typing…",
-                                style = MaterialTheme.typography.bodyLarge.copy(
-                                    fontSize = 16.sp,
-                                    lineHeight = 24.sp,
-                                    fontFamily = if (isMonospace) FontFamily.Monospace else FontFamily.Default,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            if (isMarkdownPreview) {
+                MarkdownView(
+                    markdown = textFieldValue.text,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                )
+            } else {
+                BasicTextField(
+                    value = textFieldValue,
+                    onValueChange = {
+                        textFieldValue = it
+                        syncCurrentSessionToState(it)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .drawScrollbar(verticalScrollState, color = scrollbarColor)
+                        .verticalScroll(verticalScrollState)
+                        .then(
+                            if (!isWordWrap) {
+                                Modifier.horizontalScroll(horizontalScrollState)
+                            } else {
+                                Modifier
+                            }
+                        )
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = 16.sp,
+                        lineHeight = 24.sp,
+                        fontFamily = if (isMonospace) FontFamily.Monospace else FontFamily.Default,
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    decorationBox = { innerTextField ->
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            if (documentText.isEmpty()) {
+                                Text(
+                                    text = "Start typing…",
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontSize = 16.sp,
+                                        lineHeight = 24.sp,
+                                        fontFamily = if (isMonospace) FontFamily.Monospace else FontFamily.Default,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    )
                                 )
-                            )
+                            }
+                            innerTextField()
                         }
-                        innerTextField()
                     }
-                }
-            )
+                )
+            }
 
-            // Minimal bottom status info (word & character count)
+            // Minimal bottom status info (word, character & line count)
             Text(
-                text = "$wordCount words · $charCount chars",
+                text = "$wordCount words · $charCount chars · $lineCount lines" + if (isMarkdownPreview) " (Preview)" else "",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                 modifier = Modifier
@@ -766,6 +843,42 @@ private fun EditorScreen(
                     .padding(horizontal = 16.dp, vertical = 6.dp)
             )
         }
+    }
+}
+
+@Composable
+private fun FileExtensionBadge(fileName: String, isSelected: Boolean) {
+    val ext = fileName.substringAfterLast('.', "").uppercase().ifEmpty { "TXT" }
+    val isMarkdown = ext == "MD" || ext == "MARKDOWN"
+    val isCode = ext == "JSON" || ext == "YAML" || ext == "YML" || ext == "XML" || ext == "JS" || ext == "CSS" || ext == "HTML" || ext == "CSV"
+
+    val badgeBg = when {
+        isSelected -> MaterialTheme.colorScheme.primary
+        isMarkdown -> MaterialTheme.colorScheme.tertiaryContainer
+        isCode -> MaterialTheme.colorScheme.secondaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val badgeTextColor = when {
+        isSelected -> MaterialTheme.colorScheme.onPrimary
+        isMarkdown -> MaterialTheme.colorScheme.onTertiaryContainer
+        isCode -> MaterialTheme.colorScheme.onSecondaryContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Surface(
+        color = badgeBg,
+        shape = RoundedCornerShape(6.dp),
+        modifier = Modifier.padding(end = 12.dp)
+    ) {
+        Text(
+            text = if (ext.length > 4) ext.take(3) else ext,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp
+            ),
+            color = badgeTextColor,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+        )
     }
 }
 
