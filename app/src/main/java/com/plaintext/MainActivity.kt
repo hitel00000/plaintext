@@ -1,7 +1,6 @@
 package com.plaintext
 
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -11,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
@@ -35,8 +37,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -50,13 +50,21 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -146,9 +154,12 @@ private fun EditorScreen(
     val contentResolver = context.contentResolver
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val verticalScrollState = rememberScrollState()
     val horizontalScrollState = rememberScrollState()
 
-    var documentText by rememberSaveable { mutableStateOf("") }
+    var textFieldValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(""))
+    }
     var lastSavedText by rememberSaveable { mutableStateOf("") }
     var currentFileUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     var fileName by rememberSaveable { mutableStateOf("Untitled.txt") }
@@ -159,6 +170,7 @@ private fun EditorScreen(
     var showNewConfirmDialog by remember { mutableStateOf(false) }
     var showExitConfirmDialog by remember { mutableStateOf(false) }
 
+    val documentText = textFieldValue.text
     val isModified = documentText != lastSavedText
     val wordCount by remember { derivedStateOf { DocumentStorage.countWords(documentText) } }
     val charCount by remember { derivedStateOf { DocumentStorage.countCharacters(documentText) } }
@@ -172,7 +184,7 @@ private fun EditorScreen(
             try {
                 val content = DocumentStorage.readTextFromUri(contentResolver, uri)
                 val name = DocumentStorage.queryDisplayName(contentResolver, uri) ?: "Document.txt"
-                documentText = content
+                textFieldValue = TextFieldValue(content, TextRange.Zero)
                 lastSavedText = content
                 currentFileUri = uri
                 fileName = name
@@ -193,7 +205,7 @@ private fun EditorScreen(
 
     LaunchedEffect(sharedText) {
         if (sharedText != null) {
-            documentText = sharedText
+            textFieldValue = TextFieldValue(sharedText, TextRange.Zero)
             lastSavedText = ""
             currentFileUri = null
             fileName = "Shared.txt"
@@ -278,7 +290,7 @@ private fun EditorScreen(
     }
 
     fun performNewDocument() {
-        documentText = ""
+        textFieldValue = TextFieldValue("")
         lastSavedText = ""
         currentFileUri = null
         fileName = "Untitled.txt"
@@ -426,12 +438,16 @@ private fun EditorScreen(
                 .padding(innerPadding)
                 .imePadding()
         ) {
-            TextField(
-                value = documentText,
-                onValueChange = { documentText = it },
+            val scrollbarColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+
+            BasicTextField(
+                value = textFieldValue,
+                onValueChange = { textFieldValue = it },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
+                    .drawScrollbar(verticalScrollState, color = scrollbarColor)
+                    .verticalScroll(verticalScrollState)
                     .then(
                         if (!isWordWrap) {
                             Modifier.horizontalScroll(horizontalScrollState)
@@ -439,32 +455,30 @@ private fun EditorScreen(
                             Modifier
                         }
                     )
-                    .padding(horizontal = 4.dp),
-                placeholder = {
-                    Text(
-                        text = "Start typing…",
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            fontSize = 16.sp,
-                            lineHeight = 24.sp,
-                            fontFamily = if (isMonospace) FontFamily.Monospace else FontFamily.Default,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        )
-                    )
-                },
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 textStyle = MaterialTheme.typography.bodyLarge.copy(
                     fontSize = 16.sp,
                     lineHeight = 24.sp,
                     fontFamily = if (isMonospace) FontFamily.Monospace else FontFamily.Default,
                     color = MaterialTheme.colorScheme.onSurface
                 ),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    disabledContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent
-                )
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                decorationBox = { innerTextField ->
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        if (documentText.isEmpty()) {
+                            Text(
+                                text = "Start typing…",
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontSize = 16.sp,
+                                    lineHeight = 24.sp,
+                                    fontFamily = if (isMonospace) FontFamily.Monospace else FontFamily.Default,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                )
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
             )
 
             // Minimal bottom status info (word & character count)
@@ -477,6 +491,40 @@ private fun EditorScreen(
                     .padding(horizontal = 16.dp, vertical = 6.dp)
             )
         }
+    }
+}
+
+private fun Modifier.drawScrollbar(
+    state: ScrollState,
+    color: Color,
+    thickness: Dp = 4.dp,
+    padding: Dp = 2.dp
+): Modifier = this.drawWithContent {
+    drawContent()
+
+    val totalLength = state.maxValue.toFloat()
+    if (totalLength > 0) {
+        val viewportLength = size.height
+        val contentHeight = totalLength + viewportLength
+        val thumbHeight = ((viewportLength / contentHeight) * viewportLength).coerceAtLeast(32.dp.toPx())
+        val scrollProgress = state.value.toFloat() / totalLength
+        val thumbOffset = scrollProgress * (viewportLength - thumbHeight)
+
+        val thicknessPx = thickness.toPx()
+        val paddingPx = padding.toPx()
+
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(
+                x = size.width - thicknessPx - paddingPx,
+                y = thumbOffset
+            ),
+            size = Size(
+                width = thicknessPx,
+                height = thumbHeight
+            ),
+            cornerRadius = CornerRadius(thicknessPx / 2, thicknessPx / 2)
+        )
     }
 }
 

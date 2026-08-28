@@ -39,6 +39,8 @@ The app provides a complete, production-ready, minimal plain-text editor with:
   - Smart save fallback: Automatically routes to `CreateDocument` if an external file is read-only.
   - Maximum safe file size protection (10MB limit) to prevent out-of-memory crashes.
 - **Editor Features**:
+  - **Visual Scrollbar Indicator**: Custom minimalist vertical scrollbar rendered dynamically during scrolling.
+  - **Scroll & Cursor Preservation**: Uses `TextFieldValue` with explicit `verticalScrollState` so scroll and cursor positions are seamlessly preserved when the soft keyboard appears or disappears.
   - **Monospace Font Toggle**: Switch between default system font and monospace font.
   - **Word Wrap Toggle**: Toggle horizontal scrolling on/off for log files and code.
   - **Text Statistics**: Subtle word and character counts displayed at the bottom.
