@@ -22,16 +22,18 @@ The Android project is built with Kotlin and Jetpack Compose.
 
 The app provides a functional minimal plain-text editor with:
 
-- Text editing area for UTF-8 plain text.
+- Text editing area for UTF-8 plain text with edge-to-edge and IME/keyboard padding.
 - Storage Access Framework (SAF) flow:
-  - **New**: Resets the current document.
+  - **New**: Resets the current document (with unsaved changes confirmation dialog).
   - **Open**: Uses `OpenDocument` to read text files and display their filename.
   - **Save**: Saves directly to the existing document `Uri` or launches `CreateDocument` for new files.
-- Basic error handling and feedback via `Snackbar`.
-- Document text and file metadata preserved across configuration/lifecycle changes with `rememberSaveable`.
+  - **External Intent Support**: Supports opening `.txt` documents via `ACTION_VIEW` and `ACTION_EDIT` intent filters.
+- Dirty state indication (displays `•` next to filename when modified).
+- Error handling and user feedback via `Snackbar`.
+- Document text, file metadata, and state preserved across configuration/lifecycle changes with `rememberSaveable`.
 
 ## Next task
 
-- Refine editor UX details (e.g., keyboard handling, insets/padding refinement, dirty state indication).
-- Verify edge cases in file reading/writing (e.g., empty files, non-UTF-8 encodings fallback).
+- Check file reading/writing encoding robustness (e.g., non-UTF-8 fallback or empty file handling).
+- Add unit or UI tests if needed.
 - Keep changes minimal and aligned with core principles.
