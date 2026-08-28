@@ -41,7 +41,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -172,8 +171,8 @@ private fun EditorScreen(
 
     val documentText = textFieldValue.text
     val isModified = documentText != lastSavedText
-    val wordCount by remember { derivedStateOf { DocumentStorage.countWords(documentText) } }
-    val charCount by remember { derivedStateOf { DocumentStorage.countCharacters(documentText) } }
+    val wordCount = DocumentStorage.countWords(documentText)
+    val charCount = DocumentStorage.countCharacters(documentText)
 
     BackHandler(enabled = isModified) {
         showExitConfirmDialog = true
