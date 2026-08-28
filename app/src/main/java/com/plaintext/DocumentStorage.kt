@@ -1,4 +1,4 @@
-﻿package com.plaintext
+package com.plaintext
 
 import android.content.ContentResolver
 import android.net.Uri
@@ -52,12 +52,22 @@ object DocumentStorage {
 
     suspend fun writeTextToUri(contentResolver: ContentResolver, uri: Uri, text: String): Unit =
         withContext(Dispatchers.IO) {
-            contentResolver.openOutputStream(uri, "wt")?.use { stream ->
+            val outputStream = try {
+                contentResolver.openOutputStream(uri, "wt")
+            } catch (_: Exception) {
+                try {
+                    contentResolver.openOutputStream(uri, "w")
+                } catch (_: Exception) {
+                    contentResolver.openOutputStream(uri)
+                }
+            } ?: throw IllegalStateException("Unable to open output stream (read-only or restricted URI)")
+
+            outputStream.use { stream ->
                 stream.bufferedWriter(StandardCharsets.UTF_8).use { writer ->
                     writer.write(text)
                     writer.flush()
                 }
-            } ?: throw IllegalStateException("Unable to open output stream for URI")
+            }
         }
 
     fun queryDisplayName(contentResolver: ContentResolver, uri: Uri): String? {

@@ -34,6 +34,9 @@ The app provides a complete, production-ready, minimal plain-text editor with:
 - **Robust File Storage (`DocumentStorage`)**:
   - Automatic UTF-8 BOM (`\uFEFF`) detection and sanitization.
   - Fallback encoding decoding for non-standard UTF-8 files.
+  - Multi-mode stream opening (`wt`, `w`, default) for maximum ContentProvider compatibility.
+  - Persistable URI permission acquisition across intents and SAF launchers.
+  - Smart save fallback: Automatically routes to `CreateDocument` if an external file is read-only.
   - Maximum safe file size protection (10MB limit) to prevent out-of-memory crashes.
 - **Editor Features**:
   - **Monospace Font Toggle**: Switch between default system font and monospace font.

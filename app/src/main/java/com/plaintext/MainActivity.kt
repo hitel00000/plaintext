@@ -91,7 +91,22 @@ class MainActivity : ComponentActivity() {
         if (intent.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
             sharedTextState = intent.getStringExtra(Intent.EXTRA_TEXT)
         } else {
-            externalUriState = intent.data
+            val uri = intent.data
+            if (uri != null) {
+                tryPersistUriPermission(uri, intent.flags)
+                externalUriState = uri
+            }
+        }
+    }
+
+    private fun tryPersistUriPermission(uri: Uri, flags: Int) {
+        try {
+            val takeFlags = flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            if (takeFlags != 0) {
+                contentResolver.takePersistableUriPermission(uri, takeFlags)
+            }
+        } catch (_: Exception) {
+            // Non-persistable URIs (such as temporary FileProvider URIs) do not support persistable permissions.
         }
     }
 }
@@ -190,6 +205,12 @@ private fun EditorScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
+            try {
+                contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (_: Exception) {}
             loadFromUri(uri)
         }
     }
@@ -198,6 +219,12 @@ private fun EditorScreen(
         contract = ActivityResultContracts.CreateDocument("text/plain")
     ) { uri: Uri? ->
         if (uri != null) {
+            try {
+                contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (_: Exception) {}
             coroutineScope.launch {
                 try {
                     DocumentStorage.writeTextToUri(contentResolver, uri, documentText)
@@ -224,9 +251,11 @@ private fun EditorScreen(
                     lastSavedText = documentText
                     snackbarHostState.showSnackbar("Saved $fileName")
                 } catch (e: Exception) {
+                    // Fallback to CreateDocument if writing to existing URI fails (e.g. read-only external file)
                     snackbarHostState.showSnackbar(
-                        message = "Failed to save file: ${e.localizedMessage ?: "Unknown error"}"
+                        message = "File is read-only. Please choose a location to save a copy."
                     )
+                    createDocumentLauncher.launch(fileName.ifBlank { "Untitled.txt" })
                 }
             }
         } else {
