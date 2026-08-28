@@ -1,6 +1,7 @@
 package com.plaintext
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -10,12 +11,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
@@ -60,16 +63,19 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private var externalUriState by mutableStateOf<Uri?>(null)
+    private var sharedTextState by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        externalUriState = intent?.data
+        handleIncomingIntent(intent)
 
         setContent {
             PlainTextApp(
                 externalUri = externalUriState,
-                onExternalUriConsumed = { externalUriState = null }
+                sharedText = sharedTextState,
+                onExternalUriConsumed = { externalUriState = null },
+                onSharedTextConsumed = { sharedTextState = null }
             )
         }
     }
@@ -77,14 +83,25 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        externalUriState = intent.data
+        handleIncomingIntent(intent)
+    }
+
+    private fun handleIncomingIntent(intent: Intent?) {
+        if (intent == null) return
+        if (intent.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
+            sharedTextState = intent.getStringExtra(Intent.EXTRA_TEXT)
+        } else {
+            externalUriState = intent.data
+        }
     }
 }
 
 @Composable
 private fun PlainTextApp(
     externalUri: Uri? = null,
-    onExternalUriConsumed: () -> Unit = {}
+    sharedText: String? = null,
+    onExternalUriConsumed: () -> Unit = {},
+    onSharedTextConsumed: () -> Unit = {}
 ) {
     MaterialTheme {
         Surface(
@@ -93,7 +110,9 @@ private fun PlainTextApp(
         ) {
             EditorScreen(
                 externalUri = externalUri,
-                onExternalUriConsumed = onExternalUriConsumed
+                sharedText = sharedText,
+                onExternalUriConsumed = onExternalUriConsumed,
+                onSharedTextConsumed = onSharedTextConsumed
             )
         }
     }
@@ -104,18 +123,22 @@ private fun PlainTextApp(
 private fun EditorScreen(
     modifier: Modifier = Modifier,
     externalUri: Uri? = null,
-    onExternalUriConsumed: () -> Unit = {}
+    sharedText: String? = null,
+    onExternalUriConsumed: () -> Unit = {},
+    onSharedTextConsumed: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val contentResolver = context.contentResolver
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val horizontalScrollState = rememberScrollState()
 
     var documentText by rememberSaveable { mutableStateOf("") }
     var lastSavedText by rememberSaveable { mutableStateOf("") }
     var currentFileUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     var fileName by rememberSaveable { mutableStateOf("Untitled.txt") }
     var isMonospace by rememberSaveable { mutableStateOf(false) }
+    var isWordWrap by rememberSaveable { mutableStateOf(true) }
 
     var showMenu by remember { mutableStateOf(false) }
     var showNewConfirmDialog by remember { mutableStateOf(false) }
@@ -150,6 +173,16 @@ private fun EditorScreen(
         if (externalUri != null) {
             loadFromUri(externalUri)
             onExternalUriConsumed()
+        }
+    }
+
+    LaunchedEffect(sharedText) {
+        if (sharedText != null) {
+            documentText = sharedText
+            lastSavedText = ""
+            currentFileUri = null
+            fileName = "Shared.txt"
+            onSharedTextConsumed()
         }
     }
 
@@ -203,6 +236,16 @@ private fun EditorScreen(
 
     fun saveAsDocument() {
         createDocumentLauncher.launch(fileName.ifBlank { "Untitled.txt" })
+    }
+
+    fun shareCurrentDocument() {
+        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, documentText)
+            putExtra(Intent.EXTRA_SUBJECT, fileName)
+        }
+        val shareChooser = Intent.createChooser(sendIntent, "Share text via")
+        context.startActivity(shareChooser)
     }
 
     fun performNewDocument() {
@@ -318,10 +361,24 @@ private fun EditorScreen(
                                 }
                             )
                             DropdownMenuItem(
+                                text = { Text("Share…") },
+                                onClick = {
+                                    showMenu = false
+                                    shareCurrentDocument()
+                                }
+                            )
+                            DropdownMenuItem(
                                 text = { Text(if (isMonospace) "Default Font" else "Monospace Font") },
                                 onClick = {
                                     showMenu = false
                                     isMonospace = !isMonospace
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (isWordWrap) "Disable Word Wrap" else "Enable Word Wrap") },
+                                onClick = {
+                                    showMenu = false
+                                    isWordWrap = !isWordWrap
                                 }
                             )
                         }
@@ -346,6 +403,13 @@ private fun EditorScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
+                    .then(
+                        if (!isWordWrap) {
+                            Modifier.horizontalScroll(horizontalScrollState)
+                        } else {
+                            Modifier
+                        }
+                    )
                     .padding(horizontal = 4.dp),
                 placeholder = {
                     Text(
